@@ -1,0 +1,10 @@
+﻿fileFormatVersion: 2
+guid: 538613b38d4a4facb28765eb06374863
+timeCreated: 1633569303
+AssetOrigin:
+  serializedVersion: 1
+  productId: 336166
+  packageName: Genies Avatar SDK
+  packageVersion: 2.0.1
+  assetPath: Packages/com.genies.avatar-sdk.client/Internal/VContainer/Editor/Diagnostics/VContainerInstanceTreeView.cs
+  uploadId: 850608

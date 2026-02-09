@@ -1,0 +1,29 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 64192a8731a594adaa28da65ed68a013, type: 3}
+  m_Name: Test-Profile-ID
+  m_EditorClassIdentifier: Genies.AvatarEditor::AvatarEditor.Core.LocalAvatarData
+  equippedAssetIds:
+  - AvatarBase/recmDqoKYpEG1TQV
+  - WardrobeGear/ba7383afc44bfe0d
+  - WardrobeGear/4cd0ce42c15098c7
+  serializedColors:
+    keys: []
+    values: []
+  serializedBodyAttributes:
+    keys: []
+    values: []
+  serializedTattooIds:
+    keys: 
+    values: []
+  HeadshotTexture: {fileID: 2800000, guid: 2f99ca2a3de189149970a91740d07335, type: 3}
+  HeadshotPath: Assets/Genies/AvatarEditor/Headshots\Test-Profile-ID-headshot.png

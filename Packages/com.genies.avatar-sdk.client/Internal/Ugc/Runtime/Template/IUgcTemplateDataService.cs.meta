@@ -1,0 +1,10 @@
+﻿fileFormatVersion: 2
+guid: 3e18d78ca9a34fd28f9f267e61636f8a
+timeCreated: 1681294622
+AssetOrigin:
+  serializedVersion: 1
+  productId: 336166
+  packageName: Genies Avatar SDK
+  packageVersion: 2.0.1
+  assetPath: Packages/com.genies.avatar-sdk.client/Internal/Ugc/Runtime/Template/IUgcTemplateDataService.cs
+  uploadId: 850608
