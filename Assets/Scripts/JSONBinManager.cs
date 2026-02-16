@@ -7,23 +7,17 @@ using UnityEngine.Networking;
 public class JSONBinManager : MonoBehaviour
 {
     // ---------------- CONFIGURATION ---------------- //
-    private const string API_KEY = "$2a$10$o5DEKrYiTFH36FVh/9LfMupxAwZXhKwDJhKPcx9s1mqqZPcyesh/S";
+    private const string API_KEY = "$2a$10$o5DEKrYiTFH36FVh/9LfMupxAwZXhKwDJhKPcx9s1mqqZPcyesh/S"; 
     private const string COLLECTION_ID = "69892ca543b1c97be96fce6f";
     // ----------------------------------------------- //
 
     private const string BASE_URL = "https://api.jsonbin.io/v3";
 
-    /// <summary>
-    /// Uploads a JSON string to the collection with a specific bin name.
-    /// </summary>
     public void UploadJSON(string binName, string jsonPayload, Action<bool, string> onComplete = null)
     {
         StartCoroutine(UploadRoutine(binName, jsonPayload, onComplete));
     }
 
-    /// <summary>
-    /// Downloads a JSON string from the collection by searching for its bin name.
-    /// </summary>
     public void DownloadJSONByName(string binName, Action<bool, string> onComplete)
     {
         StartCoroutine(DownloadByNameRoutine(binName, onComplete));
@@ -41,9 +35,7 @@ public class JSONBinManager : MonoBehaviour
             request.SetRequestHeader("Content-Type", "application/json");
             request.SetRequestHeader("X-Master-Key", API_KEY);
             request.SetRequestHeader("X-Collection-Id", COLLECTION_ID);
-            
-            // Assign the searchable name
-            request.SetRequestHeader("X-Bin-Name", binName); 
+            request.SetRequestHeader("X-Bin-Name", binName);
 
             yield return request.SendWebRequest();
 
@@ -62,58 +54,109 @@ public class JSONBinManager : MonoBehaviour
 
     private IEnumerator DownloadByNameRoutine(string binName, Action<bool, string> onComplete)
     {
-        // --- STEP 1: Get all bins in the collection ---
-        string collectionUrl = $"{BASE_URL}/c/{COLLECTION_ID}/bins";
-        
         string targetBinId = null;
+        string lastBinId = null; // Track the last bin ID for pagination
+        bool keepSearching = true;
+        int pageCount = 0;
+        const int BINS_PER_PAGE = 10; // JSONBin returns 10 bins per page by default
 
-        using (UnityWebRequest getCollectionReq = UnityWebRequest.Get(collectionUrl))
+        Debug.Log($"[JSONBin] Starting search for '{binName}'...");
+
+        while (keepSearching)
         {
-            getCollectionReq.SetRequestHeader("X-Master-Key", API_KEY);
-            yield return getCollectionReq.SendWebRequest();
-
-            if (getCollectionReq.result != UnityWebRequest.Result.Success)
-            {
-                Debug.LogError($"Failed to fetch collection: {getCollectionReq.error}");
-                onComplete?.Invoke(false, null);
-                yield break; // Stop execution here
-            }
-
-            // JSONBin returns a raw JSON array. JsonUtility needs a root object.
-            // We wrap the raw array into a mock object: {"bins": [ ... ]}
-            string jsonArray = getCollectionReq.downloadHandler.text;
-            string wrappedJson = "{\"bins\":" + jsonArray + "}";
+            pageCount++;
             
-            CollectionResponse response = JsonUtility.FromJson<CollectionResponse>(wrappedJson);
+            // --- URL CONSTRUCTION ---
+            // First page: /c/{COLLECTION_ID}/bins
+            // Subsequent pages: /c/{COLLECTION_ID}/bins/{LAST_BIN_ID}
+            string requestUrl = string.IsNullOrEmpty(lastBinId)
+                ? $"{BASE_URL}/c/{COLLECTION_ID}/bins"
+                : $"{BASE_URL}/c/{COLLECTION_ID}/bins/{lastBinId}";
             
-            // Search for the matching name
-            if (response != null && response.bins != null)
+            Debug.Log($"[JSONBin] Fetching Page {pageCount}: {requestUrl}");
+
+            using (UnityWebRequest getCollectionReq = UnityWebRequest.Get(requestUrl))
             {
-                foreach (var bin in response.bins)
+                getCollectionReq.SetRequestHeader("X-Master-Key", API_KEY);
+                
+                yield return getCollectionReq.SendWebRequest();
+
+                if (getCollectionReq.result != UnityWebRequest.Result.Success)
                 {
-                    if (bin.snippetMeta.name == binName)
+                    Debug.LogError($"Failed to fetch page {pageCount}: {getCollectionReq.error}");
+                    onComplete?.Invoke(false, null);
+                    yield break;
+                }
+
+                string rawJson = getCollectionReq.downloadHandler.text;
+
+                // Empty array means no more results
+                if (rawJson == "[]" || string.IsNullOrEmpty(rawJson))
+                {
+                    Debug.Log($"[JSONBin] Reached end of collection (empty response)");
+                    keepSearching = false;
+                    break;
+                }
+
+                // Wrap response for parsing
+                string wrappedJson = "{\"bins\":" + rawJson + "}";
+                WrapperArray response = JsonUtility.FromJson<WrapperArray>(wrappedJson);
+
+                if (response != null && response.bins != null && response.bins.Length > 0)
+                {
+                    Debug.Log($"[JSONBin] Page {pageCount} returned {response.bins.Length} bins");
+                    
+                    // Search current page for matching name
+                    foreach (var bin in response.bins)
                     {
-                        targetBinId = bin.record;
-                        break;
+                        string foundName = (bin.snippetMeta != null) ? bin.snippetMeta.name : "";
+                        
+                        if (foundName == binName)
+                        {
+                            targetBinId = bin.record;
+                            Debug.Log($"[JSONBin] Found bin '{binName}' with ID: {targetBinId}");
+                            keepSearching = false; 
+                            break;
+                        }
+                    }
+
+                    // If not found and we got a full page, prepare for next page
+                    if (keepSearching)
+                    {
+                        if (response.bins.Length < BINS_PER_PAGE)
+                        {
+                            // Partial page means we've reached the end
+                            Debug.Log($"[JSONBin] Reached end of collection (partial page: {response.bins.Length} bins)");
+                            keepSearching = false;
+                        }
+                        else
+                        {
+                            // Use the last bin's ID for the next request
+                            lastBinId = response.bins[response.bins.Length - 1].record;
+                            Debug.Log($"[JSONBin] Next page will use lastBinId: {lastBinId}");
+                        }
                     }
                 }
+                else
+                {
+                    Debug.Log($"[JSONBin] No bins returned on page {pageCount}");
+                    keepSearching = false;
+                }
             }
-        } // The 'using' block automatically cleans up getCollectionReq from memory
+        }
 
         if (string.IsNullOrEmpty(targetBinId))
         {
-            Debug.LogError($"Could not find a bin named '{binName}' in the collection.");
+            Debug.LogError($"Could not find a bin named '{binName}' after checking {pageCount} pages.");
             onComplete?.Invoke(false, null);
             yield break;
         }
 
-        // --- STEP 2: Download the actual bin data using the Bin ID ---
+        // --- Download Bin Data ---
         string binUrl = $"{BASE_URL}/b/{targetBinId}";
         using (UnityWebRequest getBinReq = UnityWebRequest.Get(binUrl))
         {
             getBinReq.SetRequestHeader("X-Master-Key", API_KEY);
-            
-            // This header tells JSONBin to ONLY return our raw data, hiding their metadata wrapper
             getBinReq.SetRequestHeader("X-Bin-Meta", "false"); 
 
             yield return getBinReq.SendWebRequest();
@@ -125,19 +168,16 @@ public class JSONBinManager : MonoBehaviour
             }
             else
             {
-                string finalJsonData = getBinReq.downloadHandler.text;
                 Debug.Log($"Successfully downloaded data for: {binName}");
-                onComplete?.Invoke(true, finalJsonData);
+                onComplete?.Invoke(true, getBinReq.downloadHandler.text);
             }
         }
     }
 
     // ---------------- PARSING DATA STRUCTURES ---------------- //
-    // These classes exist solely to trick Unity into parsing the 
-    // metadata array returned by JSONBin during Step 1.
 
     [Serializable]
-    private class CollectionResponse
+    private class WrapperArray
     {
         public BinMetaInfo[] bins;
     }
@@ -145,7 +185,7 @@ public class JSONBinManager : MonoBehaviour
     [Serializable]
     private class BinMetaInfo
     {
-        public string record; // This is the actual Bin ID
+        public string record; 
         public SnippetMeta snippetMeta;
     }
 

@@ -59,13 +59,13 @@
   <Project Path="Genies.Naf.Content.csproj" />
   <Project Path="Genies.Closet.csproj" />
   <Project Path="Genies.Avatars.Sdk.Editor.csproj" />
-  <Project Path="Assembly-CSharp.csproj" />
   <Project Path="UnityGLTFEditor.csproj" />
   <Project Path="Genies.Sdk.Bootstrap.Editor.csproj" />
   <Project Path="Genies.Sdk.Avatar.Samples.DebugSdkFunctions.csproj" />
   <Project Path="UnityGltf.RenderPipelines.csproj" />
   <Project Path="Genies.PerformanceMonitoring.csproj" />
   <Project Path="Assembly-CSharp-Editor.csproj" />
+  <Project Path="Assembly-CSharp.csproj" />
   <Project Path="Genies.Components.ShaderlessTools.Editor.csproj" />
   <Project Path="Genies.DataRepositoryFramework.csproj" />
   <Project Path="Genies.Customizer.Editor.csproj" />
