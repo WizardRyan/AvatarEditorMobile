@@ -4,6 +4,10 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using System.IO;
 
+#if UNITY_EDITOR
+using UnityEditor; // Required to refresh the Assets view automatically
+#endif
+
 public class CharacterPhotographer : MonoBehaviour
 {
     [Header("Stable References")]
@@ -24,6 +28,9 @@ public class CharacterPhotographer : MonoBehaviour
 
     [Header("Capture Settings")]
     [SerializeField] private Vector2Int _resolution = new Vector2Int(1024, 1024);
+    
+    // Optional: Add a subfolder to keep Resources clean
+    [SerializeField] private string _subFolder = "CharacterShots"; 
 
     public async Task<List<string>> CaptureAllShotsAsync()
     {
@@ -65,15 +72,10 @@ public class CharacterPhotographer : MonoBehaviour
         photoCam.targetTexture = new RenderTexture(_resolution.x, _resolution.y, 24);
 
         // --- CALCULATE VECTORS ---
-        // Use the runtime object (NativeGenie) for direction
-        // Use the Head (_playerCameraTarget) for height/origin
-
-        // 1. Get Flattened Forward Vector from the RUNTIME OBJECT
-        // We flatten Y so the camera doesn't tilt if the avatar is on a slope
         Vector3 modelForward = Vector3.ProjectOnPlane(orientationSource.forward, Vector3.up).normalized;
         Vector3 modelRight = Vector3.Cross(Vector3.up, modelForward); 
 
-        // 2. Get Positions
+        // Get Positions
         Vector3 headPos = _playerCameraTarget.position;
         Vector3 torsoPos = headPos + (Vector3.up * _torsoHeightOffset);
 
@@ -96,9 +98,22 @@ public class CharacterPhotographer : MonoBehaviour
         // --- SHOT 3: BODY SIDE ---
         shots.Add(new ShotDefinition {
             Name = "BodySide",
-            Position = torsoPos + (modelRight * _bodyDistance) + (modelForward * 0.5f), // Slight forward offset for depth
+            Position = torsoPos + (modelRight * _bodyDistance) + (modelForward * 0.5f), 
             LookAtTarget = torsoPos
         });
+
+        string fullSavePath;
+        #if UNITY_EDITOR
+            fullSavePath = Path.Combine(Application.dataPath, "Resources", _subFolder);
+        #else
+            fullSavePath = Path.Combine(Application.persistentDataPath, _subFolder);
+        #endif
+
+        // Ensure the directory exists
+        if (!Directory.Exists(fullSavePath))
+        {
+            Directory.CreateDirectory(fullSavePath);
+        }
 
         // Execute Shots
         foreach (var shot in shots)
@@ -116,7 +131,11 @@ public class CharacterPhotographer : MonoBehaviour
             image.Apply();
 
             byte[] bytes = image.EncodeToPNG();
-            string path = Path.Combine(Application.dataPath, $"Captured_{shot.Name}.png");
+            
+            // Save file inside the folder
+            string fileName = $"Captured_{shot.Name}.png";
+            string path = Path.Combine(fullSavePath, fileName);
+            
             File.WriteAllBytes(path, bytes);
             savedFiles.Add(path);
 
@@ -126,6 +145,14 @@ public class CharacterPhotographer : MonoBehaviour
         // Cleanup
         photoCam.targetTexture.Release();
         Destroy(camObj);
+
+        // --- REFRESH ASSET DATABASE (EDITOR ONLY) ---
+        // This makes the files appear in Unity immediately without needing to click away
+#if UNITY_EDITOR
+        AssetDatabase.Refresh();
+#endif
+        
+        Debug.Log($"<color=green>Captured {savedFiles.Count} images to: {fullSavePath}</color>");
         tcs.SetResult(savedFiles);
     }
 

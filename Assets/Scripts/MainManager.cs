@@ -3,6 +3,7 @@ using UnityEngine.UI;
 using Genies.Sdk;
 using System.Threading.Tasks;
 using Genies.Sdk.Samples.AvatarStarter;
+using System.Collections;
 using System.Collections.Generic;
 using System;
 using System.IO;
@@ -12,39 +13,15 @@ using Genies.Sdk.Samples.MultipleAvatars;
 using Genies.Services.Api;
 
 
-// [System.Serializable]
-// public class EditorLogEvent 
-// {
-//     public enum ActionType
-//     {
-//         select_category,
-//         select_subcategory,
-//         select_color,
-//         select_customization_option,
-//         rotate_view,
-//     }
-
-//     public long Timestamp;
-//     public string Action_type;
-//     public string Parameter;
-//     public string New_Value;
-
-//     public EditorLogEvent()
-//     {
-
-//     }
-// }
-
 [System.Serializable]
 public class TestRun 
 {
     public string Participant_id;
-    // public List<EditorLogEvent> action_log = new List<EditorLogEvent> ();
     public long start_ts;
     public long end_ts;
     public double time_elapsed_s;
     public int num_actions_taken;
-    public int base_gender;
+    // public int base_gender;
     public int perceived_success;
     public int perceived_difficulty;
     public int target_image;
@@ -55,6 +32,32 @@ public class TestRun
     public string final_image_portrait;
 }
 
+[System.Serializable]
+public class EditorLogEvent 
+{
+    public enum ActionType
+    {
+        select_category,
+        select_color,
+        select_customization_option,
+        rotate_view,
+    }
+
+    public long Timestamp;
+    public string Action_type;
+    public string Parameter;
+    public string New_Value;
+
+    public void ExtractParam(string oldAvatarDefinition, string newAvatarDefinition)
+    {
+        //
+    }
+
+    public EditorLogEvent()
+    {
+        
+    }
+}
 
 public enum Gender
 {
@@ -78,6 +81,9 @@ public class MainManager : MonoBehaviour
     private TestRun _testRun = new TestRun();
     private DateTime _startTime;
     private DateTime _endTime;
+
+    private string _lastKnownDefinition;
+    private Coroutine _definitionPollCoroutine;
 
     void Start()
     {
@@ -106,20 +112,31 @@ public class MainManager : MonoBehaviour
 
     private async Task FinishedEditingPressedAsync()
     {
-        Debug.Log("1. Processing Test Run Data...");
-        ProcessTestRun();
+        try
+        {
+            // Stop polling when editing is finished
+            StopDefinitionPolling();
 
-        Debug.Log("2. Capturing Screenshots...");
-        // Returns list of file paths: [0]=Portrait, [1]=Front, [2]=Side
-        _savedFilePaths = await _characterPhotographer.CaptureAllShotsAsync();
-        
-        await AvatarSdk.CloseAvatarEditorAsync(true);
-        _UIManager.ShowSurvey();
+            Debug.Log("1. Capturing Screenshots...");
+            // Returns list of file paths: [0]=Portrait, [1]=Front, [2]=Side
+            _savedFilePaths = await _characterPhotographer.CaptureAllShotsAsync();
+            Debug.Log("2. Processing Test Run Data...");
+            ProcessTestRun();
+            
+            await AvatarSdk.CloseAvatarEditorAsync(true);
+            _UIManager.ShowSurvey();
+        }
+        catch (Exception e)
+        {
+            Debug.LogError($"Error during finishing editing: {e.Message}");
+        }
     }
 
-private async Task UploadButtonPressedAsync()
+    private async Task UploadButtonPressedAsync()
     {
 
+        SetSurveyData();
+        
         _UIManager.ShowUploadInProgress();
 
         Debug.Log("3. Uploading Images to ImgBB...");
@@ -156,7 +173,6 @@ private async Task UploadButtonPressedAsync()
         Debug.Log($"Images Uploaded! Portrait URL: {_testRun.final_image_portrait}");
     }
 
-    // Helper to wrap your callback-based JSONBin upload into a Task
     private Task<bool> UploadJsonAsyncWrapper(string binName, string jsonPayload)
     {
         var tcs = new TaskCompletionSource<bool>();
@@ -186,51 +202,55 @@ private async Task UploadButtonPressedAsync()
         Debug.Log("Got Avatar Definition");
         _testRun.Participant_id = _UIManager.GetParticipantId();
         _testRun.target_image = _UIManager.GetTargetImage();
-        _testRun.base_gender = _UIManager.GetBaseGender();
+        // _testRun.base_gender = _UIManager.GetBaseGender();
+    }
+
+    private void SetSurveyData()
+    {
         _testRun.perceived_difficulty = _UIManager.GetPerceivedDifficulty();
         _testRun.perceived_success = _UIManager.GetPerceivedSuccess();
     }
 
-public void LoadDefaultAvatar(Gender gender)
-{
-    string defaultName = "";
+    public void LoadDefaultAvatar(Gender gender)
+    {
+        string defaultName = "";
 
-    if(gender == Gender.MALE)
-    {
-        defaultName = "default-male";
-    }
-    else if(gender == Gender.FEMALE)
-    {
-        defaultName = "default-female";
-    }
-    else
-    {
-        defaultName = "default-nonbinary";
-    }
-
-    _JSONBinManager.DownloadJSONByName(defaultName, (success, result) =>
-    {
-        if (success)
+        if(gender == Gender.MALE)
         {
-            var _defaultAvatarJSON = result;
-            
-            _defaultAvatar = JsonUtility.FromJson<TestRun>(result);
-            
-            if (_defaultAvatar != null)
-            {
-                Debug.Log($"Loaded Default Avatar - Participant: {_defaultAvatar.Participant_id}, Platform: {_defaultAvatar.platform}");
-            }
-            else
-            {
-                Debug.LogError("Failed to parse default avatar JSON into TestRun object");
-            }
+            defaultName = "default-male";
+        }
+        else if(gender == Gender.FEMALE)
+        {
+            defaultName = "default-female";
         }
         else
         {
-            Debug.LogError("Failed to download default avatar");
+            defaultName = "default-nonbinary";
         }
-    });
-}
+
+        _JSONBinManager.DownloadJSONByName(defaultName, (success, result) =>
+        {
+            if (success)
+            {
+                var _defaultAvatarJSON = result;
+                
+                _defaultAvatar = JsonUtility.FromJson<TestRun>(result);
+                
+                if (_defaultAvatar != null)
+                {
+                    Debug.Log($"Loaded Default Avatar - Participant: {_defaultAvatar.Participant_id}, Platform: {_defaultAvatar.platform}");
+                }
+                else
+                {
+                    Debug.LogError("Failed to parse default avatar JSON into TestRun object");
+                }
+            }
+            else
+            {
+                Debug.LogError("Failed to download default avatar");
+            }
+        });
+    }
 
     public void BeginEditingAvatar()
     {
@@ -246,12 +266,52 @@ public void LoadDefaultAvatar(Gender gender)
         await AvatarSdk.OpenAvatarEditorAsync(_managedAvatar);
         Debug.Log("Setting Default Avatar Definition in Editor..." + _defaultAvatar.avatar_definition);
         await AvatarSdk.GetAvatarEditorAvatar().SetDefinitionAsync(_defaultAvatar.avatar_definition);
-        // SetDefaultAvatar();
+
+        // Initialize the baseline definition and start polling
+        _lastKnownDefinition = GetAvatarDefinition();
+        _testRun.num_actions_taken = 0;
+        StartDefinitionPolling();
+
         _startTime = DateTime.UtcNow;
         Debug.Log("Started Timing, Experiment Begins Now");
     }
 
-    private void SetDefaultAvatar()
+    private void StartDefinitionPolling()
     {
+        StopDefinitionPolling();
+        _definitionPollCoroutine = StartCoroutine(PollDefinitionCoroutine());
+    }
+
+    private void StopDefinitionPolling()
+    {
+        if (_definitionPollCoroutine != null)
+        {
+            StopCoroutine(_definitionPollCoroutine);
+            _definitionPollCoroutine = null;
+        }
+    }
+
+    private IEnumerator PollDefinitionCoroutine()
+    {
+        while (true)
+        {
+            yield return new WaitForSeconds(1f);
+
+            try
+            {
+                string currentDefinition = GetAvatarDefinition();
+
+                if (currentDefinition != _lastKnownDefinition)
+                {
+                    _testRun.num_actions_taken++;
+                    _lastKnownDefinition = currentDefinition;
+                    Debug.Log($"Avatar definition changed! num_actions_taken: {_testRun.num_actions_taken}");
+                }
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning($"Definition poll error: {e.Message}");
+            }
+        }
     }
 }
