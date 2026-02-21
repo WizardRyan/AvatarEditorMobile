@@ -11,7 +11,8 @@ using Unity.VectorGraphics;
 using UnityEngine.SceneManagement;
 using Genies.Sdk.Samples.MultipleAvatars;
 using Genies.Services.Api;
-
+using NUnit.Framework.Internal;
+using System.Linq;
 
 [System.Serializable]
 public class TestRun 
@@ -30,6 +31,8 @@ public class TestRun
     public string final_image_front;
     public string final_image_side;
     public string final_image_portrait;
+
+    public List<EditorLogEvent> action_log = new List<EditorLogEvent>();
 }
 
 [System.Serializable]
@@ -57,6 +60,49 @@ public class EditorLogEvent
     {
         
     }
+}
+
+public enum CategoryType
+{
+    Shirts,
+    Outerwear,
+    Bottoms,
+    Pants,
+    Shorts,
+    Skirts,
+    Dresses,
+    Shoes,
+    Accessories,
+    Earrings,
+    Glasses,
+    Hats,
+    Masks,
+    Body,
+    Face,
+    Eyes,
+    Jawline,
+    Lips,
+    Nose,
+    Brows,
+    Lashes,
+    Hair,
+    FacialHair,
+    Makeup,
+    BeautyMarks,
+    Blush,
+    Eyeshadow,
+    Gems,
+    Lipstick,
+    Stickers,
+    Tattoos,
+    AboveKnee,
+    Belly,
+    BelowKnee,
+    Bicecp,
+    Calf,
+    Forearm,
+    LowerBack,
+    Thigh
 }
 
 public enum Gender
@@ -202,6 +248,9 @@ public class MainManager : MonoBehaviour
         Debug.Log("Got Avatar Definition");
         _testRun.Participant_id = _UIManager.GetParticipantId();
         _testRun.target_image = _UIManager.GetTargetImage();
+
+        // filter out color actions since they are already captured by avatar definition changes
+        _testRun.action_log = _testRun.action_log.Where(ev => ev.Action_type != EditorLogEvent.ActionType.select_color.ToString()).ToList();
         // _testRun.base_gender = _UIManager.GetBaseGender();
     }
 
@@ -304,6 +353,7 @@ public class MainManager : MonoBehaviour
                 if (currentDefinition != _lastKnownDefinition)
                 {
                     _testRun.num_actions_taken++;
+                    AddCustomizationOptionEvent(_lastKnownDefinition, currentDefinition);
                     _lastKnownDefinition = currentDefinition;
                     Debug.Log($"Avatar definition changed! num_actions_taken: {_testRun.num_actions_taken}");
                 }
@@ -313,5 +363,88 @@ public class MainManager : MonoBehaviour
                 Debug.LogWarning($"Definition poll error: {e.Message}");
             }
         }
+    }
+
+    public void AddCustomizationOptionEvent(string lastKnownDefinition, string newDefinition)
+    {
+        string param = "Shirts";
+
+        foreach (var ev in _testRun.action_log.AsEnumerable().Reverse())
+        {
+            if(ev.Action_type == EditorLogEvent.ActionType.select_category.ToString())
+            {
+                param = ev.Parameter;
+                break;
+            }
+            else if(ev.Action_type == EditorLogEvent.ActionType.select_color.ToString())
+            {
+                param = ev.Parameter;
+                break;
+            }
+        }
+
+        _testRun.action_log.Add(new EditorLogEvent 
+        {
+            Timestamp = TimeStampNow(),
+            Action_type = EditorLogEvent.ActionType.select_customization_option.ToString(),
+            Parameter = param,
+            New_Value = newDefinition
+        });
+    }
+
+    public void AddCategoryClickEvent(string categoryName)
+    {
+        _testRun.action_log.Add(new EditorLogEvent 
+        {
+            Timestamp = TimeStampNow(),
+            Action_type = EditorLogEvent.ActionType.select_category.ToString(),
+            Parameter = categoryName,
+            New_Value = ""
+        });
+        _testRun.num_actions_taken++;
+    }
+
+    public void AddColorClickEvent()
+    {
+
+        string param = "Body";
+
+        foreach (var ev in _testRun.action_log.AsEnumerable().Reverse())
+        {
+            if(ev.Action_type == EditorLogEvent.ActionType.select_category.ToString())
+            {
+                param = ev.Parameter;
+                if(param == "Face")
+                {
+                    param = "Eyes";
+                }
+                break;
+            }
+        }
+
+        _testRun.action_log.Add(new EditorLogEvent 
+        {
+            Timestamp = TimeStampNow(),
+            Action_type = EditorLogEvent.ActionType.select_color.ToString(),
+            Parameter = param,
+            New_Value = ""
+        });
+    }
+
+    public void AddRotateViewEvent(string newEulerAngles)
+    {
+        _testRun.action_log.Add(new EditorLogEvent 
+        {
+            Timestamp = TimeStampNow(),
+            Action_type = EditorLogEvent.ActionType.rotate_view.ToString(),
+            Parameter = "",
+            New_Value = ""
+        });
+        _testRun.num_actions_taken++;
+    }
+
+    public long TimeStampNow()
+    {
+        return ((DateTimeOffset)DateTime.UtcNow).ToUnixTimeSeconds();
     }
 }

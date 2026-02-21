@@ -13,14 +13,72 @@ using UnityEngine.EventSystems; // Required for raw UI pointer events
 
 public class RawUIClickCatcher : MonoBehaviour, IPointerClickHandler
 {
-    // A delegate to store the function we want to call back in the Manager
-    public System.Action<GameObject> onNodeClicked;
+    // Now passes both the clicked object and the name of its parent category
+    public System.Action<GameObject, string> onNodeClicked;
+    public string parentCategory;
 
-    // This is fired directly by the Unity EventSystem when the object is clicked
     public void OnPointerClick(PointerEventData eventData)
     {
-        // Invoke the manager's function, passing this gameObject
-        onNodeClicked?.Invoke(gameObject);
+        onNodeClicked?.Invoke(gameObject, parentCategory);
+    }
+}
+
+[System.Serializable]
+public class UIInterceptTarget
+{
+    public string parentName;
+    public string cloneNameTarget;
+    [HideInInspector] public Transform cachedParent = null;
+}
+
+
+public class RotationWatcher : MonoBehaviour
+{
+    // The event we will fire when rotation officially stops
+    public System.Action<GameObject> onRotationEnded;
+
+    [Tooltip("How long the object must remain still before firing the event")]
+    public float settleTime = 0.2f;
+    
+    [Tooltip("Minimum angle change (in degrees) to be considered 'rotating'")]
+    public float angleThreshold = 0.05f;
+
+    private Quaternion lastRotation;
+    private bool isRotating = false;
+    private float stationaryTimer = 0f;
+
+    void Start()
+    {
+        // Initialize our baseline rotation
+        lastRotation = transform.rotation;
+    }
+
+    void Update()
+    {
+        // Check the difference between current rotation and the last recorded rotation
+        float angleDifference = Quaternion.Angle(transform.rotation, lastRotation);
+
+        if (angleDifference > angleThreshold)
+        {
+            // The object is actively moving. 
+            // Reset the timer and update the last known rotation.
+            isRotating = true;
+            stationaryTimer = 0f;
+            lastRotation = transform.rotation;
+        }
+        else if (isRotating)
+        {
+            // The object hasn't moved past the threshold, but it WAS rotating.
+            // Start counting up the settle timer.
+            stationaryTimer += Time.deltaTime;
+
+            if (stationaryTimer >= settleTime)
+            {
+                // The object has been still for long enough. Fire the event!
+                isRotating = false;
+                onRotationEnded?.Invoke(gameObject);
+            }
+        }
     }
 }
 
@@ -52,14 +110,26 @@ public class UIManager : MonoBehaviour
     [Tooltip("Assign the UI Image for the Body Front shot here")]
     [SerializeField] private Image _targetImageBody;
 
-    [Header("Settings")]
-    public string nodeNameTarget = "CustomizerNavBarNode(Clone)";
-    public float checkInterval = 1.0f;
-    public string parentNavBarName = "GPCustomizerNavBar";
-    private Transform navBarParent = null;
+[Header("UI Targets")]
+    // In the Inspector, set Size to 2.
+    // Element 0: Parent = "GPCustomizerNavBar", Clone = "CustomizerNavBarNode(Clone)"
+    // Element 1: Parent = "SecondaryItemPicker", Clone = "CellHolder(Clone)"
+    public List<UIInterceptTarget> targets = new List<UIInterceptTarget>();
+
+
+    [Header("RotateTargets")]
+    public string cloneNameTarget = "NativeGenie(Clone)";
+    public float checkIntervalRotation = 1.0f;
+
+    // Optional: If NativeGenie(Clone) always spawns under a specific parent, 
+    // put the parent's name here to heavily optimize the search.
+    public string optionalParentName = "AvatarSpawn"; 
+
+    private HashSet<GameObject> processedGenies = new HashSet<GameObject>();
+    private Transform cachedParent = null;
 
     private HashSet<GameObject> processedNodes = new HashSet<GameObject>();
-
+    public float checkInterval = 1.0f;
     private int _targetImage = 1;
     private int _baseGender = 0;
     private string _participantId = "";
@@ -188,8 +258,6 @@ public class UIManager : MonoBehaviour
         return _perceivedSuccess;
     }
 
-
-
     // Update is called once per frame
     void Update()
     {
@@ -242,6 +310,7 @@ public class UIManager : MonoBehaviour
         _buttonFinishedEditing.SetActive(true);
         _UIBackgroundPlane.SetActive(false);
         _cinemachineFreeLookControls.SetActive(true);
+        StartCoroutine(PollForGeniesRoutine());
     }
 
     private void HideEditorOpenUI()
@@ -282,61 +351,145 @@ private IEnumerator PollForNewNodesRoutine()
     {
         while (true)
         {
-            // Step 1: Find the parent container. 
-            // We do this inside the loop in case the game destroys and recreates the Nav Bar.
-            if (navBarParent == null)
+            foreach (var target in targets)
             {
-                GameObject parentObj = GameObject.Find(parentNavBarName);
-                if (parentObj != null)
+                // Find parent if we lost it or haven't found it yet
+                if (target.cachedParent == null)
                 {
-                    navBarParent = parentObj.transform;
+                    GameObject parentObj = GameObject.Find(target.parentName);
+                    if (parentObj != null) target.cachedParent = parentObj.transform;
                 }
-            }
 
-            // Step 2: If we have the parent, search ONLY its descendants.
-            if (navBarParent != null)
-            {
-                // Passing 'true' allows it to find inactive children as well, 
-                // just in case the game hides them before showing them.
-                Transform[] childTransforms = navBarParent.GetComponentsInChildren<Transform>(true);
-
-                foreach (Transform t in childTransforms)
+                // If parent exists, search its children for the clones
+                if (target.cachedParent != null)
                 {
-                    GameObject go = t.gameObject;
+                    Transform[] childTransforms = target.cachedParent.GetComponentsInChildren<Transform>(true);
 
-                    if (go.name == nodeNameTarget && !processedNodes.Contains(go))
+                    foreach (Transform t in childTransforms)
                     {
-                        SetupNode(go);
-                        processedNodes.Add(go);
+                        GameObject go = t.gameObject;
+
+                        if (go.name == target.cloneNameTarget && !processedNodes.Contains(go))
+                        {
+                            SetupNode(go, target.parentName);
+                            processedNodes.Add(go);
+                        }
                     }
                 }
             }
 
-            // Clean up the hashset in case any nodes were destroyed by the game
+            // Clean up destroyed nodes
             processedNodes.RemoveWhere(node => node == null);
 
             yield return new WaitForSeconds(checkInterval);
         }
     }
 
-    private void SetupNode(GameObject node)
+    private void SetupNode(GameObject node, string parentCategory)
     {
-        // Add our custom low-level click catcher instead of a standard Button
         RawUIClickCatcher clickCatcher = node.GetComponent<RawUIClickCatcher>();
         if (clickCatcher == null)
         {
             clickCatcher = node.AddComponent<RawUIClickCatcher>();
         }
 
-        // Wire up the callback to our manager's function
-        clickCatcher.onNodeClicked = NavBarNodeClicked;
+        clickCatcher.parentCategory = parentCategory;
+        clickCatcher.onNodeClicked = OnInterceptedClick;
     }
 
-    // The function called when a node is clicked
-    public void NavBarNodeClicked(GameObject clickedNode)
+    public void OnInterceptedClick(GameObject clickedNode, string parentCategory)
     {
-        Debug.Log($"[Success] Intercepted click on: {clickedNode.name}", clickedNode);
+        string nodeText = ExtractTextFromNode(clickedNode);
+
+        Debug.Log($"[UI Clicked] Category: {parentCategory} | Node: {clickedNode.name} | Text: {nodeText}");
         
-        // Your logic goes here
+        if (parentCategory == "GPCustomizerNavBar")
+        {
+            Debug.Log("Clicked on Category");
+            _mainManager.AddCategoryClickEvent(nodeText);
+        }
+        else if (parentCategory == "SecondaryItemPicker")
+        {
+            Debug.Log($"Clicked on Color");
+            _mainManager.AddColorClickEvent();
+        }
+
+    }
+
+    private string ExtractTextFromNode(GameObject node)
+    {
+        TextMeshProUGUI tmpText = node.GetComponentInChildren<TextMeshProUGUI>(true);
+        if (tmpText != null && !string.IsNullOrEmpty(tmpText.text))
+        {
+            return tmpText.text;
+        }
+
+        return "[No Text Found]";
+    }
+
+    private IEnumerator PollForGeniesRoutine()
+    {
+        while (true)
+        {
+            Transform[] transformsToSearch = null;
+
+            // Decide whether to search the whole scene or just a specific parent
+            if (!string.IsNullOrEmpty(optionalParentName))
+            {
+                if (cachedParent == null)
+                {
+                    GameObject parentObj = GameObject.Find(optionalParentName);
+                    if (parentObj != null) cachedParent = parentObj.transform;
+                }
+
+                if (cachedParent != null)
+                {
+                    transformsToSearch = cachedParent.GetComponentsInChildren<Transform>(true);
+                }
+            }
+            else
+            {
+                // Fallback: search everything if no parent is provided
+                transformsToSearch = FindObjectsOfType<Transform>();
+            }
+
+            if (transformsToSearch != null)
+            {
+                foreach (Transform t in transformsToSearch)
+                {
+                    GameObject go = t.gameObject;
+
+                    if (go.name == cloneNameTarget && !processedGenies.Contains(go))
+                    {
+                        SetupGenie(go);
+                        processedGenies.Add(go);
+                    }
+                }
+            }
+
+            // Clean up the set in case genies are destroyed
+            processedGenies.RemoveWhere(node => node == null);
+
+            yield return new WaitForSeconds(checkInterval);
+        }
+    }
+
+    private void SetupGenie(GameObject genie)
+    {
+        RotationWatcher watcher = genie.GetComponent<RotationWatcher>();
+        if (watcher == null)
+        {
+            watcher = genie.AddComponent<RotationWatcher>();
+        }
+
+        watcher.onRotationEnded = HandleGenieRotationEnded;
+    }
+
+    private void HandleGenieRotationEnded(GameObject genieObj)
+    {
+        Vector3 finalEulerAngles = genieObj.transform.localEulerAngles;
+        
+        Debug.Log($"[Rotation Ended] {genieObj.name} stopped at Euler Angles: {finalEulerAngles}");
+        _mainManager.AddRotateViewEvent(finalEulerAngles.ToString());
     }
 }

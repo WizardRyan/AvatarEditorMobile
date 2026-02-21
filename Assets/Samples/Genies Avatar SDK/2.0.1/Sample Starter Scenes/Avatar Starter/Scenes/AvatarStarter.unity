@@ -1910,6 +1910,17 @@ MonoBehaviour:
   _mainManager: {fileID: 462258908}
   _targetImagePortrait: {fileID: 1011320469}
   _targetImageBody: {fileID: 783061702}
+  targets:
+  - parentName: GPCustomizerNavBar
+    cloneNameTarget: CustomizerNavBarNode(Clone)
+    cachedParent: {fileID: 0}
+  - parentName: SecondaryItemPicker
+    cloneNameTarget: LongPressItemPickerCell(Clone)
+    cachedParent: {fileID: 0}
+  cloneNameTarget: NativeGenie(Clone)
+  checkIntervalRotation: 1
+  optionalParentName: AvatarSpawn
+  checkInterval: 1
 --- !u!4 &551518987
 Transform:
   m_ObjectHideFlags: 0
@@ -2221,7 +2232,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 1, y: 1}
   m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: -265.26, y: -363}
+  m_AnchoredPosition: {x: -265.26, y: -239}
   m_SizeDelta: {x: 160, y: 50}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &611885989
@@ -2473,6 +2484,60 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 630449416}
   m_CullTransparentMesh: 1
+--- !u!1 &640248149
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 640248151}
+  - component: {fileID: 640248150}
+  m_Layer: 0
+  m_Name: UI_Remover
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &640248150
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 640248149}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a404d2a657bfd51438f804e34ae08dbf, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: '::'
+  checkInterval: 1
+  targets:
+  - parentContainerName: ActionBarContiner
+    elementToRemove: CustomizerActionBar
+    removalMethod: 2
+    cachedParent: {fileID: 0}
+  - parentContainerName: SecondaryItemPicker
+    elementToRemove: StickyButtons
+    removalMethod: 2
+    cachedParent: {fileID: 0}
+--- !u!4 &640248151
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 640248149}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 978.4273, y: 0, z: 5994.19}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!4 &684823378 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 515153538437378103, guid: dbbd1063e382a418c8d3f45c7451a32a, type: 3}
@@ -11598,7 +11663,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 6371955602391052782, guid: ab56c81f4b3384ad5b59c400f212427e, type: 3}
       propertyPath: m_AnchoredPosition.y
-      value: 40
+      value: 40.00006
       objectReference: {fileID: 0}
     - target: {fileID: 6738144387568766853, guid: ab56c81f4b3384ad5b59c400f212427e, type: 3}
       propertyPath: m_Name
@@ -11726,3 +11791,4 @@ SceneRoots:
   - {fileID: 772486212}
   - {fileID: 720807584}
   - {fileID: 1856228806}
+  - {fileID: 640248151}
