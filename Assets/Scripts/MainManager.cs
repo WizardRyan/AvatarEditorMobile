@@ -160,7 +160,6 @@ public class MainManager : MonoBehaviour
     {
         try
         {
-            // Stop polling when editing is finished
             StopDefinitionPolling();
 
             Debug.Log("1. Capturing Screenshots...");
@@ -206,17 +205,28 @@ public class MainManager : MonoBehaviour
 
     private async Task UploadImages()
     {
-        Task<string> taskPortrait = _imgBBManager.UploadImageAsync(_savedFilePaths[0]);
-        Task<string> taskFront = _imgBBManager.UploadImageAsync(_savedFilePaths[1]);
-        Task<string> taskSide = _imgBBManager.UploadImageAsync(_savedFilePaths[2]);
+        Task<string> taskPortrait = UploadImageWithRetry(_savedFilePaths[0]);
+        Task<string> taskFront    = UploadImageWithRetry(_savedFilePaths[1]);
+        Task<string> taskSide     = UploadImageWithRetry(_savedFilePaths[2]);
 
         await Task.WhenAll(taskPortrait, taskFront, taskSide);
 
-        _testRun.final_image_portrait = await taskPortrait;
-        _testRun.final_image_front = await taskFront;
-        _testRun.final_image_side = await taskSide;
+        _testRun.final_image_portrait = taskPortrait.Result;
+        _testRun.final_image_front    = taskFront.Result;
+        _testRun.final_image_side     = taskSide.Result;
 
         Debug.Log($"Images Uploaded! Portrait URL: {_testRun.final_image_portrait}");
+    }
+
+    private async Task<string> UploadImageWithRetry(string filePath, int maxAttempts = 3)
+    {
+        for (int attempt = 1; attempt <= maxAttempts; attempt++)
+        {
+            string url = await _imgBBManager.UploadImageAsync(filePath);
+            if (url != null) return url;
+            Debug.LogWarning($"Image upload attempt {attempt}/{maxAttempts} failed: {filePath}");
+        }
+        return null;
     }
 
     private Task<bool> UploadJsonAsyncWrapper(string binName, string jsonPayload)
@@ -313,16 +323,28 @@ public class MainManager : MonoBehaviour
     {
         _managedAvatar = _loadMyAvatar.LoadedAvatar;
         await AvatarSdk.OpenAvatarEditorAsync(_managedAvatar);
-        Debug.Log("Setting Default Avatar Definition in Editor..." + _defaultAvatar.avatar_definition);
-        await AvatarSdk.GetAvatarEditorAvatar().SetDefinitionAsync(_defaultAvatar.avatar_definition);
 
-        // Initialize the baseline definition and start polling
-        _lastKnownDefinition = GetAvatarDefinition();
+        // Record start time immediately — before SetDefinitionAsync, so it's always set
+        // even if the definition call fails.
         _testRun.num_actions_taken = 0;
-        StartDefinitionPolling();
-
         _startTime = DateTime.UtcNow;
         Debug.Log("Started Timing, Experiment Begins Now");
+
+        // Apply the default avatar definition. Wrapped in try-catch so that a failure
+        // doesn't prevent polling from starting — which was the original source of both bugs.
+        Debug.Log("Setting Default Avatar Definition in Editor..." + _defaultAvatar.avatar_definition);
+        try
+        {
+            await AvatarSdk.GetAvatarEditorAvatar().SetDefinitionAsync(_defaultAvatar.avatar_definition);
+        }
+        catch (Exception e)
+        {
+            Debug.LogWarning($"Failed to apply default avatar definition: {e.Message}. Continuing with current definition.");
+        }
+
+        // Always set the baseline and start polling, regardless of whether SetDefinitionAsync succeeded.
+        _lastKnownDefinition = GetAvatarDefinition();
+        StartDefinitionPolling();
     }
 
     private void StartDefinitionPolling()
@@ -342,9 +364,10 @@ public class MainManager : MonoBehaviour
 
     private IEnumerator PollDefinitionCoroutine()
     {
+        var wait = new WaitForSeconds(0.5f);
         while (true)
         {
-            yield return new WaitForSeconds(1f);
+            yield return wait;
 
             try
             {

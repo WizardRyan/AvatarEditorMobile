@@ -5285,13 +5285,10 @@ MonoBehaviour:
   m_MultiSelect: 0
   m_Options:
     m_Options:
-    - m_Text: 1
+    - m_Text: 1 (Easy)
       m_Image: {fileID: 0}
       m_Color: {r: 1, g: 1, b: 1, a: 1}
-    - m_Text: 2
-      m_Image: {fileID: 0}
-      m_Color: {r: 1, g: 1, b: 1, a: 1}
-    - m_Text: 3
+    - m_Text: 2 (Hard)
       m_Image: {fileID: 0}
       m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_OnValueChanged:
@@ -5608,7 +5605,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: 1
+  m_text: 1 (Easy)
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
   m_sharedMaterial: {fileID: 2180264, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
@@ -11641,6 +11638,10 @@ PrefabInstance:
       propertyPath: m_IsActive
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 5952992418506936198, guid: ab56c81f4b3384ad5b59c400f212427e, type: 3}
+      propertyPath: m_Text
+      value: spacelabtechnical@gmail.com
+      objectReference: {fileID: 0}
     - target: {fileID: 6325673007104093939, guid: ab56c81f4b3384ad5b59c400f212427e, type: 3}
       propertyPath: m_AnchorMax.y
       value: 0
@@ -11694,6 +11695,10 @@ PrefabInstance:
       value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 7511879579068624647, guid: ab56c81f4b3384ad5b59c400f212427e, type: 3}
+      propertyPath: m_text
+      value: "spacelabtechnical@gmail.com\u200B"
+      objectReference: {fileID: 0}
+    - target: {fileID: 7511879579068624647, guid: ab56c81f4b3384ad5b59c400f212427e, type: 3}
       propertyPath: 'm_ActiveFontFeatures.Array.data[0]'
       value: 1801810542
       objectReference: {fileID: 0}
@@ -11720,6 +11725,10 @@ PrefabInstance:
     - target: {fileID: 7689435586321348920, guid: ab56c81f4b3384ad5b59c400f212427e, type: 3}
       propertyPath: 'm_ActiveFontFeatures.Array.data[0]'
       value: 1801810542
+      objectReference: {fileID: 0}
+    - target: {fileID: 8408971674311109021, guid: ab56c81f4b3384ad5b59c400f212427e, type: 3}
+      propertyPath: m_Enabled
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 8408971674311109021, guid: ab56c81f4b3384ad5b59c400f212427e, type: 3}
       propertyPath: 'm_ActiveFontFeatures.Array.data[0]'
