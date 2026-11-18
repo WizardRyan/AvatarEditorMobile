@@ -23,6 +23,41 @@ public class JSONBinManager : MonoBehaviour
         StartCoroutine(DownloadByNameRoutine(binName, onComplete));
     }
 
+    /// <summary>
+    /// Downloads a bin directly by its id (a single request, no collection scan),
+    /// retrying on rate limiting (429), server errors and connection errors.
+    /// </summary>
+    public void DownloadJSONById(string binId, Action<bool, string> onComplete, int maxAttempts = 5)
+    {
+        StartCoroutine(DownloadByIdRoutine(binId, onComplete, maxAttempts));
+    }
+
+    private IEnumerator DownloadByIdRoutine(string binId, Action<bool, string> onComplete, int maxAttempts)
+    {
+        for (int attempt = 1; attempt <= maxAttempts; attempt++)
+        {
+            using (UnityWebRequest req = UnityWebRequest.Get($"{BASE_URL}/b/{binId}/latest"))
+            {
+                req.SetRequestHeader("X-Master-Key", API_KEY);
+                req.SetRequestHeader("X-Bin-Meta", "false");
+                yield return req.SendWebRequest();
+
+                if (req.result == UnityWebRequest.Result.Success)
+                {
+                    onComplete?.Invoke(true, req.downloadHandler.text);
+                    yield break;
+                }
+
+                bool retryable = req.responseCode == 429 || req.responseCode >= 500
+                                 || req.result == UnityWebRequest.Result.ConnectionError;
+                Debug.LogWarning($"[JSONBin] Download of {binId} failed ({req.responseCode} {req.error}), attempt {attempt}/{maxAttempts}");
+                if (!retryable) break;
+            }
+            yield return new WaitForSecondsRealtime(Mathf.Min(16f, Mathf.Pow(2, attempt)));
+        }
+        onComplete?.Invoke(false, null);
+    }
+
     private IEnumerator UploadRoutine(string binName, string json, Action<bool, string> onComplete)
     {
         string url = $"{BASE_URL}/b";

@@ -532,6 +532,9 @@ PlayerSettings:
   - m_BuildTarget: Standalone
     m_StaticBatching: 1
     m_DynamicBatching: 0
+  - m_BuildTarget: iPhone
+    m_StaticBatching: 1
+    m_DynamicBatching: 0
   m_BuildTargetShaderSettings: []
   m_BuildTargetGraphicsJobs: []
   m_BuildTargetGraphicsJobMode: []
@@ -839,6 +842,7 @@ PlayerSettings:
     Android: TOOLBOX_FORCE_DEFAULT_LISTS
     Standalone: TOOLBOX_FORCE_DEFAULT_LISTS
     WebGL: TOOLBOX_FORCE_DEFAULT_LISTS
+    iPhone: TOOLBOX_FORCE_DEFAULT_LISTS
   additionalCompilerArguments: {}
   platformArchitecture: {}
   scriptingBackend:

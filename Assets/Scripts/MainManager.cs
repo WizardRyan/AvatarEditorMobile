@@ -28,6 +28,8 @@ public class TestRun
     public int target_image;
     public string platform = "mobile";
     public string avatar_definition;
+    public string initial_avatar_definition;   // definition at the start of editing
+    public bool default_avatar_applied;        // false = participant started from the account (purple) avatar
     public string final_image_front;
     public string final_image_side;
     public string final_image_portrait;
@@ -270,43 +272,58 @@ public class MainManager : MonoBehaviour
         _testRun.perceived_success = _UIManager.GetPerceivedSuccess();
     }
 
+    // Default avatar bins, fetched directly by id. Looking them up by name meant paging through the
+    // whole collection (newest first, so ~26 requests and growing with every participant), which
+    // failed under JSONBin rate limiting/outages and left the participant on the account's
+    // (purple-haired) avatar.
+    private static readonly Dictionary<Gender, (string name, string binId)> DefaultAvatarBins = new Dictionary<Gender, (string, string)>
+    {
+        { Gender.NONBINARY, ("default-nonbinary", "69929658ae596e708f2e2f19") },
+        { Gender.MALE,      ("default-male",      "699298dfd0ea881f40bdd046") },
+        { Gender.FEMALE,    ("default-female",    "69929a4bae596e708f2e3604") },
+    };
+    private const string DefaultCacheKeyPrefix = "cached_default_avatar_";
+    private const float DefaultAvatarWaitSeconds = 20f;
+
     public void LoadDefaultAvatar(Gender gender)
     {
-        string defaultName = "";
+        var (defaultName, binId) = DefaultAvatarBins[gender];
+        string cacheKey = DefaultCacheKeyPrefix + defaultName;
 
-        if(gender == Gender.MALE)
+        // Use the last successfully downloaded copy right away; the download below refreshes it.
+        string cached = PlayerPrefs.GetString(cacheKey, "");
+        if (!string.IsNullOrEmpty(cached))
         {
-            defaultName = "default-male";
-        }
-        else if(gender == Gender.FEMALE)
-        {
-            defaultName = "default-female";
-        }
-        else
-        {
-            defaultName = "default-nonbinary";
+            var cachedRun = JsonUtility.FromJson<TestRun>(cached);
+            if (!string.IsNullOrEmpty(cachedRun?.avatar_definition))
+            {
+                _defaultAvatar = cachedRun;
+                Debug.Log($"Using cached default avatar '{defaultName}' until the download completes.");
+            }
         }
 
-        _JSONBinManager.DownloadJSONByName(defaultName, (success, result) =>
+        _JSONBinManager.DownloadJSONById(binId, (success, result) =>
         {
             if (success)
             {
-                var _defaultAvatarJSON = result;
-                
-                _defaultAvatar = JsonUtility.FromJson<TestRun>(result);
-                
-                if (_defaultAvatar != null)
+                var downloaded = JsonUtility.FromJson<TestRun>(result);
+                if (!string.IsNullOrEmpty(downloaded?.avatar_definition))
                 {
-                    Debug.Log($"Loaded Default Avatar - Participant: {_defaultAvatar.Participant_id}, Platform: {_defaultAvatar.platform}");
+                    _defaultAvatar = downloaded;
+                    PlayerPrefs.SetString(cacheKey, result);
+                    PlayerPrefs.Save();
+                    Debug.Log($"Loaded Default Avatar '{defaultName}' - Participant: {_defaultAvatar.Participant_id}, Platform: {_defaultAvatar.platform}");
                 }
                 else
                 {
-                    Debug.LogError("Failed to parse default avatar JSON into TestRun object");
+                    Debug.LogError($"Default avatar '{defaultName}' downloaded but has no avatar_definition.");
                 }
             }
             else
             {
-                Debug.LogError("Failed to download default avatar");
+                Debug.LogError(_defaultAvatar != null
+                    ? $"Failed to download default avatar '{defaultName}'; using cached copy."
+                    : $"Failed to download default avatar '{defaultName}' and no cached copy exists.");
             }
         });
     }
@@ -321,30 +338,59 @@ public class MainManager : MonoBehaviour
 
     public async Task BeginEditingAvatarAsync()
     {
-        _managedAvatar = _loadMyAvatar.LoadedAvatar;
-        await AvatarSdk.OpenAvatarEditorAsync(_managedAvatar);
-
-        // Record start time immediately — before SetDefinitionAsync, so it's always set
-        // even if the definition call fails.
-        _testRun.num_actions_taken = 0;
-        _startTime = DateTime.UtcNow;
-        Debug.Log("Started Timing, Experiment Begins Now");
-
-        // Apply the default avatar definition. Wrapped in try-catch so that a failure
-        // doesn't prevent polling from starting — which was the original source of both bugs.
-        Debug.Log("Setting Default Avatar Definition in Editor..." + _defaultAvatar.avatar_definition);
         try
         {
-            await AvatarSdk.GetAvatarEditorAvatar().SetDefinitionAsync(_defaultAvatar.avatar_definition);
+            // Don't start on the wrong avatar just because the default is still downloading.
+            float waited = 0f;
+            while (_defaultAvatar == null && waited < DefaultAvatarWaitSeconds)
+            {
+                await Task.Delay(250);
+                waited += 0.25f;
+            }
+
+            _managedAvatar = _loadMyAvatar.LoadedAvatar;
+            await AvatarSdk.OpenAvatarEditorAsync(_managedAvatar);
+
+            // Record start time immediately — before SetDefinitionAsync, so it's always set
+            // even if the definition call fails.
+            _testRun.num_actions_taken = 0;
+            _startTime = DateTime.UtcNow;
+            Debug.Log("Started Timing, Experiment Begins Now");
+
+            bool applied = false;
+            if (_defaultAvatar != null && !string.IsNullOrEmpty(_defaultAvatar.avatar_definition))
+            {
+                try
+                {
+                    Debug.Log("Setting Default Avatar Definition in Editor..." + _defaultAvatar.avatar_definition);
+                    await AvatarSdk.GetAvatarEditorAvatar().SetDefinitionAsync(_defaultAvatar.avatar_definition);
+                    applied = true;
+                }
+                catch (Exception e)
+                {
+                    Debug.LogError($"Failed to apply default avatar definition: {e.Message}. Continuing with current definition.");
+                }
+            }
+            else
+            {
+                Debug.LogError($"Default avatar not available after {DefaultAvatarWaitSeconds}s; participant starts from the account avatar.");
+            }
+
+            // Record exactly what the participant started from, so analysis never has to infer it.
+            _lastKnownDefinition = GetAvatarDefinition();
+            _testRun.initial_avatar_definition = _lastKnownDefinition;
+            _testRun.default_avatar_applied = applied;
         }
         catch (Exception e)
         {
-            Debug.LogWarning($"Failed to apply default avatar definition: {e.Message}. Continuing with current definition.");
+            Debug.LogError($"Error while starting the editing session: {e}");
         }
-
-        // Always set the baseline and start polling, regardless of whether SetDefinitionAsync succeeded.
-        _lastKnownDefinition = GetAvatarDefinition();
-        StartDefinitionPolling();
+        finally
+        {
+            // Always log changes, whatever happened above (previously an exception here silently
+            // stopped all select_customization_option logging for the session).
+            StartDefinitionPolling();
+        }
     }
 
     private void StartDefinitionPolling()
